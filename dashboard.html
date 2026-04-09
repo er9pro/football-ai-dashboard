@@ -51,10 +51,10 @@ button:hover { background: #45a049; }
 <label>Лига</label>
 <select id="leagueFilter">
 <option value="all">Все лиги</option>
-<option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option>
-<option value="La Liga">🇪🇸 La Liga</option>
-<option value="Serie A">🇮🇹 Serie A</option>
-<option value="Bundesliga">🇩🇪 Bundesliga</option>
+<option value="Premier League">Premier League</option>
+<option value="La Liga">La Liga</option>
+<option value="Serie A">Serie A</option>
+<option value="Bundesliga">Bundesliga</option>
 </select>
 </div>
 <div class="filter-group">
@@ -65,7 +65,7 @@ button:hover { background: #45a049; }
 <label>Min Confidence</label>
 <input type="number" id="confFilter" value="60" min="0" max="100" step="5">
 </div>
-<button onclick="loadPredictions()">🔄 Refresh</button>
+<button onclick="loadPredictions()">Refresh</button>
 </div>
 <div class="stats" id="stats"></div>
 <div class="matches" id="matches"></div>
@@ -73,31 +73,31 @@ button:hover { background: #45a049; }
 <script>
 let allPredictions = [];
 function loadPredictions() {
-  document.getElementById('matches').innerHTML = '<div class="loading">Загрузка прогнозов...</div>';
+  document.getElementById('matches').innerHTML = '<div class="loading">Loading predictions...</div>';
   fetch('/api/predictions')
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        allPredictions = data.data;
+        allPredictions = data.data || [];
         updateStats(data);
         filterAndDisplay();
       } else {
-        document.getElementById('matches').innerHTML = `<div class="error">❌ ${data.error}</div>`;
+        document.getElementById('matches').innerHTML = '<div class="error">Error: ' + (data.error || 'Unknown error') + '</div>';
       }
     })
     .catch(e => {
-      document.getElementById('matches').innerHTML = `<div class="error">❌ ${e.message}</div>`;
+      document.getElementById('matches').innerHTML = '<div class="error">Error: ' + e.message + '</div>';
     });
 }
 function updateStats(data) {
-  const valueBets = data.data.filter(p => p.value_bets.length > 0).length;
-  const avgConf = (data.data.reduce((s, p) => s + p.confidence, 0) / data.data.length).toFixed(0);
-  document.getElementById('stats').innerHTML = `
-    <div class="stat-card"><h3>${data.count}</h3><p>Матчей</p></div>
-    <div class="stat-card"><h3>${valueBets}</h3><p>Value Bets</p></div>
-    <div class="stat-card"><h3>${avgConf}%</h3><p>Avg Confidence</p></div>
-    <div class="stat-card"><h3>${new Date(data.updated).toLocaleString('ru')}</h3><p>Updated</p></div>
-  `;
+  const predictions = data.data || [];
+  const valueBets = predictions.filter(p => (p.value_bets || []).length > 0).length;
+  const avgConf = predictions.length > 0 ? (predictions.reduce((s, p) => s + (p.confidence || 0), 0) / predictions.length).toFixed(0) : 0;
+  document.getElementById('stats').innerHTML =
+    '<div class="stat-card"><h3>' + (data.count || 0) + '</h3><p>Matches</p></div>' +
+    '<div class="stat-card"><h3>' + valueBets + '</h3><p>Value Bets</p></div>' +
+    '<div class="stat-card"><h3>' + avgConf + '%</h3><p>Avg Confidence</p></div>' +
+    '<div class="stat-card"><h3>' + (data.updated ? new Date(data.updated).toLocaleString('ru') : 'N/A') + '</h3><p>Updated</p></div>';
 }
 function filterAndDisplay() {
   const league = document.getElementById('leagueFilter').value;
@@ -105,58 +105,37 @@ function filterAndDisplay() {
   const minConf = parseFloat(document.getElementById('confFilter').value) || 0;
   let filtered = allPredictions.filter(p => {
     const leagueMatch = league === 'all' || p.league === league;
-    const confMatch = p.confidence >= minConf;
+    const confMatch = (p.confidence || 0) >= minConf;
     return leagueMatch && confMatch;
   });
+  if (filtered.length === 0) {
+    document.getElementById('matches').innerHTML = '<div class="error">No matches found</div>';
+    return;
+  }
   const html = filtered.map(p => {
-    const pred = p.predictions['1X2'];
-    const totals = p.predictions.totals;
-    const valueBetsHTML = p.value_bets.length > 0 ? `
-      <div class="value-bets">
-        <h4>💎 VALUE BETS:</h4>
-        ${p.value_bets.map(v => `<div class="value-bet-item">${v.type}: +${v['value%']}% edge (${v.prob}% prob)</div>`).join('')}
-      </div>
-    ` : '';
-    return `
-      <div class="match-card">
-        <div class="match-header">
-          <span>${p.league}</span>
-          <span class="confidence">Confidence: ${p.confidence}%</span>
-        </div>
-        <div class="match-teams">
-          <span>${p.home}</span>
-          <span class="vs">vs</span>
-          <span>${p.away}</span>
-        </div>
-        <p style="opacity: 0.8; margin-bottom: 15px;">${p.date} ${p.time} | λ: ${p.lambda_home} vs ${p.lambda_away} | Injuries: ${p.injuries.home}/${p.injuries.away}</p>
-        <div class="predictions">
-          <div>
-            <h4>1X2 Probabilities</h4>
-            <div class="prob-bar">
-              <div class="prob-fill prob-1" style="width: ${pred['1']}%">${pred['1']}%</div>
-            </div>
-            <div class="prob-bar">
-              <div class="prob-fill prob-X" style="width: ${pred['X']}%">${pred['X']}%</div>
-            </div>
-            <div class="prob-bar">
-              <div class="prob-fill prob-2" style="width: ${pred['2']}%">${pred['2']}%</div>
-            </div>
-          </div>
-          <div>
-            <h4>Over/Under 2.5</h4>
-            <div class="prob-bar">
-              <div class="prob-fill prob-1" style="width: ${totals.over2_5}%">Over: ${totals.over2_5}%</div>
-            </div>
-            <div class="prob-bar">
-              <div class="prob-fill prob-2" style="width: ${totals.under2_5}%">Under: ${totals.under2_5}%</div>
-            </div>
-          </div>
-        </div>
-        ${valueBetsHTML}
-      </div>
-    `;
+    const pred = (p.predictions && p.predictions['1X2']) || {};
+    const totals = (p.predictions && p.predictions.totals) || {};
+    const valueBetsList = p.value_bets || [];
+    const valueBetsHTML = valueBetsList.length > 0 ?
+      '<div class="value-bets"><h4>VALUE BETS:</h4>' +
+      valueBetsList.map(v => '<div class="value-bet-item">' + v.type + ': +' + v['value%'] + '% edge (' + v.prob + '% prob)</div>').join('') +
+      '</div>' : '';
+    const injuries = p.injuries || {};
+    return '<div class="match-card">' +
+      '<div class="match-header"><span>' + (p.league || '') + '</span><span class="confidence">Confidence: ' + (p.confidence || 0) + '%</span></div>' +
+      '<div class="match-teams"><span>' + (p.home || '') + '</span><span class="vs">vs</span><span>' + (p.away || '') + '</span></div>' +
+      '<p style="opacity:0.8;margin-bottom:15px">' + (p.date || '') + ' ' + (p.time || '') + ' | Lambda: ' + (p.lambda_home || '?') + ' vs ' + (p.lambda_away || '?') + ' | Injuries: ' + (injuries.home || 0) + '/' + (injuries.away || 0) + '</p>' +
+      '<div class="predictions">' +
+      '<div><h4>1X2 Probabilities</h4>' +
+      '<div class="prob-bar"><div class="prob-fill prob-1" style="width:' + (pred['1'] || 0) + '%">1: ' + (pred['1'] || 0) + '%</div></div>' +
+      '<div class="prob-bar"><div class="prob-fill prob-X" style="width:' + (pred['X'] || 0) + '%">X: ' + (pred['X'] || 0) + '%</div></div>' +
+      '<div class="prob-bar"><div class="prob-fill prob-2" style="width:' + (pred['2'] || 0) + '%">2: ' + (pred['2'] || 0) + '%</div></div></div>' +
+      '<div><h4>Over/Under 2.5</h4>' +
+      '<div class="prob-bar"><div class="prob-fill prob-1" style="width:' + (totals.over2_5 || 0) + '%">Over: ' + (totals.over2_5 || 0) + '%</div></div>' +
+      '<div class="prob-bar"><div class="prob-fill prob-2" style="width:' + (totals.under2_5 || 0) + '%">Under: ' + (totals.under2_5 || 0) + '%</div></div></div>' +
+      '</div>' + valueBetsHTML + '</div>';
   }).join('');
-  document.getElementById('matches').innerHTML = html || '<div class="error">No matches found</div>';
+  document.getElementById('matches').innerHTML = html;
 }
 document.getElementById('leagueFilter').addEventListener('change', filterAndDisplay);
 document.getElementById('valueFilter').addEventListener('input', filterAndDisplay);
