@@ -1,0 +1,12 @@
+flask
+flask-cors
+requests
+beautifulsoup4
+understatapi
+pandas
+numpy
+scikit-learn
+scipy
+schedule
+lxml
+apscheduler
